@@ -4186,6 +4186,11 @@ bool get_target_partition(picoboot::connection &con, uint32_t* start = nullptr, 
 }
 
 bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
+
+    uint64_t data = 0;
+    con.flash_id(data);
+    printf("flash_id: %llx\n", data);
+
     picoboot_memory_access raw_access(con);
     range flash_binary_range(FLASH_START, FLASH_END_RP2350); // pick biggest (rp2350) here for now
     bool flash_binary_end_unknown = true;

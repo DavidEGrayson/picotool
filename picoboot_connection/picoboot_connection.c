@@ -12,6 +12,8 @@
 #include "picoboot_connection.h"
 #include "boot/bootrom_constants.h"
 
+#define ENABLE_DEBUG_LOG 1
+
 #if ENABLE_DEBUG_LOG
 #include <stdio.h>
 #define output(...) printf(__VA_ARGS__)
@@ -685,6 +687,11 @@ int picoboot_flash_id(libusb_device_handle *usb_device, uint64_t *data) {
     assert(PICOBOOT_FLASH_ID_CMD_PROG_SIZE == flash_id_bin_SIZE);
     uint8_t prog[PICOBOOT_FLASH_ID_CMD_PROG_SIZE];
     uint64_t id;
+
+    uint32_t p = 0;
+    int pr = picoboot_peek(usb_device, SRAM_START, &p);
+    output("TRY PEEK: code %d\n", pr);
+
     output("GET FLASH ID\n");
     memcpy(prog, flash_id_bin, flash_id_bin_SIZE);
 
