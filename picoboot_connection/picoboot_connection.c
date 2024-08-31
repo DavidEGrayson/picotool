@@ -429,7 +429,7 @@ int picoboot_reboot2(libusb_device_handle *usb_device, struct picoboot_reboot2_c
 int picoboot_exec(libusb_device_handle *usb_device, uint32_t addr) {
     struct picoboot_cmd cmd;
     // shouldn't be necessary any more
-    // addr |= 1u; // Thumb bit
+    addr |= 1u; // Thumb bit
     if (verbose) output("EXEC %08x\n", (unsigned int) addr);
     cmd.bCmdId = PC_EXEC;
     cmd.bCmdSize = sizeof(cmd.address_only_cmd);
@@ -450,16 +450,41 @@ int picoboot_exec(libusb_device_handle *usb_device, uint32_t addr) {
 //     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 // } // currently unused
 
+#include <stdio.h>
+
+// Calls flash_range_erase in the bootrom.
+static int picoboot_flash_range_erase(libusb_device_handle *usb_device,
+  uint32_t addr, uint32_t len, uint32_t block_size, uint8_t block_cmd)
+{
+    // These bytes come from `arm-none-eabi-as -al call.s`, with the function
+    // lookup code and function arguments appended.
+    uint8_t call_asm[] = {
+        0x10, 0xB5, 0x10, 0xBD,
+        // 0x10, 0xB5, 0x14, 0x24, 0x20, 0x88, 0x05, 0x49,
+        // 0xA4, 0x88, 0xA0, 0x47, 0x04, 0x1C, 0x04, 0x48,
+        // 0x04, 0x49, 0x05, 0x4A, 0x05, 0x4B, 0xA0, 0x47,
+        // 0x10, 0xBD, 0, 0,
+        // 'R', 'E', 0, 0,
+        // addr, addr >> 8, addr >> 16, addr >> 24,
+        // len, len >> 8, len >> 16, len >> 24,
+        // block_size, block_size >> 8, block_size >> 16, block_size >> 24,
+        // block_cmd, 0, 0, 0,
+    };
+    int ret = picoboot_write(usb_device, SRAM_START, call_asm, sizeof(call_asm));
+    if (ret) { return ret; }
+
+    uint32_t data = 0;
+    ret = picoboot_peek(usb_device, SRAM_START, &data);
+    printf("Called picoboot_peek (%d, %lx)\n", ret, data);
+
+    ret = picoboot_exec(usb_device, SRAM_START);
+    printf("Called picoboot_exec (%d)\n", ret);
+    return ret;
+}
 
 int picoboot_flash_erase(libusb_device_handle *usb_device, uint32_t addr, uint32_t len) {
-    struct picoboot_cmd cmd;
-    if (verbose) output("FLASH_ERASE %08x+%08x\n", (unsigned int) addr, (unsigned int) len);
-    cmd.bCmdId = PC_FLASH_ERASE;
-    cmd.bCmdSize = sizeof(cmd.range_cmd);
-    cmd.range_cmd.dAddr = addr;
-    cmd.range_cmd.dSize = len;
-    cmd.dTransferLength = 0;
-    return picoboot_cmd(usb_device, &cmd, NULL, 0);
+    assert(((addr | len) & (FLASH_SECTOR_ERASE_SIZE - 1)) == 0);
+    return picoboot_flash_range_erase(usb_device, addr, len, FLASH_SECTOR_ERASE_SIZE, 0x20);
 }
 
 int picoboot_vector(libusb_device_handle *usb_device, uint32_t addr) {
